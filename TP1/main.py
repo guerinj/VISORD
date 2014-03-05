@@ -11,7 +11,7 @@ from ipdb import launch_ipdb_on_exception
 # Histogram classes
 #########################
 
-class LabHistogram:
+class Histogram:
 
     def __init__(self, histResolution, scaleDisplay):
         self.histResolution = histResolution
@@ -38,8 +38,18 @@ class LabHistogram:
                 )
         return displayHist
 
+class LabHistogram(Histogram):
 
-class RGBHistogram:
+    def __init__(self, histResolution, scaleDisplay):
+        self.histResolution = histResolution
+        self.scaleDisplay = scaleDisplay
+        self.histSize = [histResolution, histResolution]
+        self.Ranges = [0, 255, 0, 255]
+        self.Channels = [1, 2]
+        self.Hist = np.zeros((histResolution, histResolution))
+
+
+class RGBHistogram(Histogram):
 
     def __init__(self, histResolution, scaleDisplay):
         self.histResolution = histResolution
@@ -49,25 +59,8 @@ class RGBHistogram:
         self.Channels = [0, 1]
         self.Hist = np.zeros((histResolution, histResolution))
 
-    def addImageToHist(self, image, mask):
-        self.Hist = cv2.calcHist([image], self.Channels, mask, self.histSize, self.Ranges, self.Hist, True)
 
-    def getDiplayHist(self):
-        rawHist = cv2.normalize(self.Hist)
-        displayHist = np.zeros((self.histResolution * self.scaleDisplay, self.histResolution * self.scaleDisplay))
-        for a in range(0, 32):
-            for b in range(0, 32):
-                cv2.rectangle(
-                    displayHist,
-                    (a*self.scaleDisplay, b*self.scaleDisplay),
-                    ((a + 1)*self.scaleDisplay - 1, (b + 1)*self.scaleDisplay - 1),
-                    rawHist.item(a, b),
-                    cv2.cv.CV_FILLED
-                )
-        return displayHist
-
-
-class HSVHistogram:
+class HSVHistogram(Histogram):
 
     def __init__(self, histResolution, scaleDisplay):
         self.histResolution = histResolution
@@ -77,22 +70,7 @@ class HSVHistogram:
         self.Channels = [1, 2]
         self.Hist = np.zeros((histResolution, histResolution))
 
-    def addImageToHist(self, image, mask):
-        self.Hist = cv2.calcHist([image], self.Channels, mask, self.histSize, self.Ranges, self.Hist, True)
 
-    def getDiplayHist(self):
-        rawHist = cv2.normalize(self.Hist)
-        displayHist = np.zeros((self.histResolution * self.scaleDisplay, self.histResolution * self.scaleDisplay))
-        for a in range(0, 32):
-            for b in range(0, 32):
-                cv2.rectangle(
-                    displayHist,
-                    (a*self.scaleDisplay, b*self.scaleDisplay),
-                    ((a + 1)*self.scaleDisplay - 1, (b + 1)*self.scaleDisplay - 1),
-                    rawHist.item(a, b),
-                    cv2.cv.CV_FILLED
-                )
-        return displayHist
 
 
 #########################
@@ -138,7 +116,6 @@ class NaiveComp:
                 elif self.mode == "HSV":
                     a = image.item(x, y, 0) * 31 / 255
                     b = image.item(x, y, 1) * 31 / 255
-                #print "%s %s" % (a, b)
                 
                 if peau.item(a, b) > nonPeau.item(a, b):
                     detection.itemset((x, y, 0), 255)
@@ -146,6 +123,32 @@ class NaiveComp:
                     detection.itemset((x, y, 0), 0)
         return detection
 
+    def bayesDetectPeau(self, image):
+        detection = np.zeros((image.shape[0], image.shape[1], 1), np.uint8)
+
+        pPeau = np.sum(self.peauHistogram.Hist)
+        pNonPeau = np.sum(self.nonPeauHistogram.Hist)
+
+        peau = cv2.normalize(self.peauHistogram.Hist)
+        nonPeau = cv2.normalize(self.nonPeauHistogram.Hist)
+
+        for x in range(0, image.shape[0]):
+            for y in range(0, image.shape[1]):
+                if self.mode == "Lab":
+                    a = image.item(x, y, 1) * 31 / 255
+                    b = image.item(x, y, 2) * 31 / 255
+                elif self.mode == "RGB":
+                    a = image.item(x, y, 0) * 31 / 255
+                    b = image.item(x, y, 1) * 31 / 255
+                elif self.mode == "HSV":
+                    a = image.item(x, y, 0) * 31 / 255
+                    b = image.item(x, y, 1) * 31 / 255
+                if (peau.item(a, b)*pPeau + nonPeau.item(a, b)*pNonPeau) != 0:
+                    detection.itemset(
+                        (x, y, 0), 
+                        255.0*peau.item(a, b)*pPeau/(peau.item(a, b)*pPeau + nonPeau.item(a, b)*pNonPeau)
+                        )
+        return detection
 
 ###############################
 #  UTILS
@@ -192,7 +195,7 @@ with launch_ipdb_on_exception():
     rgbComp = NaiveComp("RGB")
     hsvComp = NaiveComp("HSV")
 
-    #files = files[:9]
+    files = files[:5]
     for f in files:
         print "Adding file : %s " % dirFacesPath + f.split('.')[0] + '_R.jpg'
         print "Adding file : %s " % dirRawPath + f
@@ -253,30 +256,78 @@ with launch_ipdb_on_exception():
     cv2.namedWindow("Detection HSV")
     cv2.namedWindow("Original")
 
-    imageToDetect = cv2.imread("./Test/test3.jpg")
+    cv2.imshow("Original", labComp.peauHistogram.getDiplayHist())
+    cv2.imshow("Detection Lab", labComp.nonPeauHistogram.getDiplayHist())
+    cv2.imshow("Detection RGB", rgbComp.peauHistogram.getDiplayHist())
+    cv2.imshow("Detection HSV", rgbComp.nonPeauHistogram.getDiplayHist())
+    cv2.waitKey(0)
 
-    cv2.imshow("Original", cv2.imread("./Test/test3.jpg"))
+    imageToDetect = cv2.imread("./Raw/1Person0003.jpg")
 
-    cv2.imshow("Detection Lab", labComp.detectPeau(
+    cv2.imshow("Original", imageToDetect)
+
+    cv2.imshow("Detection Lab", labComp.bayesDetectPeau(
         cv2.cvtColor(
                 imageToDetect,
-                cv2.COLOR_BGR2LAB),
+                cv2.COLOR_BGR2LAB)
         ))
 
-    # cv2.imshow("Detection Lab", cv2.cvtColor(
-    #             imageToDetect,
-    #             cv2.COLOR_BGR2LAB)
-    #     )
-    cv2.imshow("Detection RGB", labComp.detectPeau(
+    cv2.imshow("Detection RGB", rgbComp.bayesDetectPeau(
         cv2.cvtColor(
                 imageToDetect,
-                cv2.COLOR_BGR2RGB),
+                cv2.COLOR_BGR2RGB)
         ))
 
-    cv2.imshow("Detection HSV", labComp.detectPeau(
+    cv2.imshow("Detection HSV", hsvComp.bayesDetectPeau(
         cv2.cvtColor(
                 imageToDetect,
-                cv2.COLOR_BGR2HSV),
+                cv2.COLOR_BGR2HSV)
+        ))
+
+    cv2.waitKey(0)
+    imageToDetect = cv2.imread("./Test/test1.jpg")
+
+    cv2.imshow("Original", imageToDetect)
+
+    cv2.imshow("Detection Lab", labComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2LAB)
+        ))
+
+    cv2.imshow("Detection RGB", rgbComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2RGB)
+        ))
+
+    cv2.imshow("Detection HSV", hsvComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2HSV)
+        ))
+
+    cv2.waitKey(0)
+    imageToDetect = cv2.imread("./Test/test2.jpg")
+
+    cv2.imshow("Original", imageToDetect)
+
+    cv2.imshow("Detection Lab", labComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2LAB)
+        ))
+
+    cv2.imshow("Detection RGB", rgbComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2RGB)
+        ))
+
+    cv2.imshow("Detection HSV", hsvComp.bayesDetectPeau(
+        cv2.cvtColor(
+                imageToDetect,
+                cv2.COLOR_BGR2HSV)
         ))
 
     cv2.waitKey(0)
