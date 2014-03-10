@@ -140,7 +140,7 @@ if __name__ == "__main__":
     rgbHist = Histogram(histRange, scale, "RGB")
     hsvHist = Histogram(histRange, scale, "HSV")
 
-    #files = files[:10]
+    files = files[:10]
     for f in files:
         print "Adding file : %s " % dirFacesPath + f.split('.')[0] + '_R.jpg'
         print "Adding file : %s " % dirRawPath + f

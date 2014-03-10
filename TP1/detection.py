@@ -49,19 +49,22 @@ class Comp:
         
         for x in range(0, image.shape[0]):
             for y in range(0, image.shape[1]):
+                #ipdb.set_trace()
                 if self.mode == "LAB":
-                    a = image.item(x, y, 1) * 31 / 255
-                    b = image.item(x, y, 2) * 31 / 255
-                elif self.mode == "RGB":
-                    a = image.item(x, y, 0) * 31 / 255
-                    b = image.item(x, y, 1) * 31 / 255
+                    a = int(image.item(x, y, 1) * 31 / 255)
+                    b = int(image.item(x, y, 2) * 31 / 255)
+                elif self.mode == "RGB":    
+                    a = int(image.item(x, y, 0) * 31 / 255)
+                    b = int(image.item(x, y, 1) * 31 / 255)
                 elif self.mode == "HSV":
-                    a = image.item(x, y, 0) * 31 / 255
-                    b = image.item(x, y, 1) * 31 / 255
-                if peau.item(a, b) > nonPeau.item(a, b):
-                    detection.itemset((x, y, 0), 255)
-                else:
-                    detection.itemset((x, y, 0), 0)
+                    a = int(image.item(x, y, 0) * 31 / 255)
+                    b = int(image.item(x, y, 1) * 31 / 255)
+                if self.nonPeauHistogram.Hist.item(a, b) == 0:
+                    if self.peauHistogram.Hist.item(a, b) > 0:
+                        detection.itemset((x, y, 0), 255)
+                else: #if 255*self.peauHistogram.Hist.item(a, b)/self.nonPeauHistogram.Hist.item(a, b) > 20*255/32:
+                    detection.itemset((x, y, 0), 255*self.peauHistogram.Hist.item(a, b)/self.nonPeauHistogram.Hist.item(a, b))
+                
         return detection
 
     def bayesDetectPeau(self, image):
@@ -120,6 +123,7 @@ with launch_ipdb_on_exception():
             if filename.strip() != '.DS_Store':
                 files.append(filename.strip())
 
+    files=files[:10]
     for f in files :
         print "Trying to detect on : %s " % dirTestPath + f
         imageToDetect = cv2.imread(dirTestPath + f)
